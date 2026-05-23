@@ -233,7 +233,8 @@ const defaultState = () => ({
     { label: '나이트',  time: '16:00~21:00' },
     { label: '나이트2', time: '16:30~21:30' },
     { label: '단축',    time: '9:30~14:30' },
-    { label: '휴무',    time: 'X' }
+    { label: '휴무',    time: 'X' },
+    { label: '연차',    time: 'X(연차)' }
   ],
   data: {}
 });
@@ -399,7 +400,12 @@ function displayValue(v) {
   if (!v) return '';
   if (!compactMode) return v;
   const sh = state.shifts.find(s => s.time === v);
-  return sh ? (sh.time === 'X' ? 'X' : sh.label) : v;
+  return sh ? (isOffValue(sh.time) ? sh.time : sh.label) : v;
+}
+function isOffValue(v) {
+  if (!v) return false;
+  // X로 시작하거나 / 휴무 / 휴가 / 연차 포함되면 휴무로 간주
+  return /^X/i.test(v) || /휴무|휴가|연차/.test(v);
 }
 
 function render() {
@@ -427,7 +433,7 @@ function render() {
     state.staff.forEach(s => {
       const k = dateKey(y, m, d, s);
       const v = state.data[k] || '';
-      const cls = 'cell ' + (v === 'X' ? 'off' : 'shift');
+      const cls = 'cell ' + (isOffValue(v) ? 'off' : 'shift');
       html += `<td class="${cls}" data-day="${d}" data-staff="${escapeHtml(s)}">${escapeHtml(displayValue(v))}</td>`;
     });
     html += '</tr>';
@@ -454,8 +460,9 @@ function openCellModal(day, staff) {
   presets.innerHTML = '';
   state.shifts.forEach(sh => {
     const b = document.createElement('span');
-    b.className = 'preset-btn' + (sh.time === 'X' ? ' off' : '');
-    b.textContent = sh.time === 'X' ? `${sh.label} (X)` : `${sh.label} ${sh.time}`;
+    const off = isOffValue(sh.time);
+    b.className = 'preset-btn' + (off ? ' off' : '');
+    b.textContent = off ? `${sh.label} (${sh.time})` : `${sh.label} ${sh.time}`;
     b.onclick = () => setCellValue(sh.time);
     presets.appendChild(b);
   });
@@ -624,7 +631,7 @@ document.getElementById('exportBtn').onclick = async () => {
       cell.alignment = center; cell.border = border;
       if (colNumber === 1) cell.font = isWeekend ? redFont : { bold: true };
       else if (colNumber === 2) { if (isWeekend) cell.font = redFont; }
-      else { if (cell.value === 'X') cell.font = redFont; }
+      else { if (isOffValue(cell.value)) cell.font = redFont; }
     });
   }
   ws.columns.forEach((col, i) => { col.width = (i < 2) ? 6 : 14; });
