@@ -87,6 +87,20 @@
   .preset-btn:active { background: #e5edff; border-color: #aac; }
   .preset-btn.off { color: var(--red); font-weight: bold; }
   .preset-btn.clear { color: #666; }
+  .order-list { list-style: none; padding: 0; margin: 12px 0; }
+  .order-list li {
+    display: flex; align-items: center; gap: 8px;
+    padding: 10px 12px; background: #f9f9f9; border: 1px solid #e5e5e5;
+    border-radius: 8px; margin-bottom: 6px; font-size: 14px;
+  }
+  .order-list .name { flex: 1; font-weight: 500; }
+  .order-list .arrow {
+    width: 38px; height: 38px; border: 1px solid #ccc; background: white;
+    border-radius: 6px; cursor: pointer; font-size: 16px; padding: 0;
+    display: flex; align-items: center; justify-content: center;
+  }
+  .order-list .arrow:active { background: #e5edff; }
+  .order-list .arrow:disabled { opacity: 0.3; cursor: not-allowed; }
   .shift-list { list-style: none; padding: 0; margin: 12px 0 8px; }
   .shift-list li { display: flex; gap: 6px; align-items: center; padding: 4px 0; }
   .shift-list input { flex: 1; padding: 9px 10px; border: 1px solid #ccc; border-radius: 6px; font-size: 14px; min-height: 40px; }
@@ -150,6 +164,7 @@
   <select id="year" aria-label="연도"></select>
   <select id="month" aria-label="월"></select>
   <button id="addStaff">＋직원</button>
+  <button id="orderStaff">↕순서</button>
   <button id="editShifts">⚙시간대</button>
   <button id="toggleCompact">🔁표시</button>
   <button id="clearAll">🗑초기화</button>
@@ -173,6 +188,18 @@
     </div>
     <div class="modal-actions">
       <button onclick="closeCellModal()">닫기</button>
+    </div>
+  </div>
+</div>
+
+<!-- Staff order modal -->
+<div class="modal-bg" id="orderModal">
+  <div class="modal">
+    <h3>↕ 직원 순서 변경</h3>
+    <p>▲ ▼ 버튼으로 순서를 바꾸세요. 변경은 즉시 저장되고 다른 기기에도 반영됩니다.</p>
+    <ul class="order-list" id="orderList"></ul>
+    <div class="modal-actions">
+      <button class="primary" onclick="closeOrderModal()">완료</button>
     </div>
   </div>
 </div>
@@ -505,6 +532,39 @@ document.getElementById('logoutBtn').onclick = () => {
   clearSession();
   location.reload();
 };
+
+document.getElementById('orderStaff').onclick = () => {
+  renderOrderList();
+  document.getElementById('orderModal').classList.add('show');
+};
+function closeOrderModal() { document.getElementById('orderModal').classList.remove('show'); }
+function renderOrderList() {
+  const list = document.getElementById('orderList');
+  list.innerHTML = '';
+  state.staff.forEach((s, i) => {
+    const li = document.createElement('li');
+    li.innerHTML = `
+      <button class="arrow" data-act="up" data-idx="${i}" ${i === 0 ? 'disabled' : ''}>▲</button>
+      <button class="arrow" data-act="down" data-idx="${i}" ${i === state.staff.length - 1 ? 'disabled' : ''}>▼</button>
+      <span class="name">${escapeHtml(s)}</span>`;
+    list.appendChild(li);
+  });
+  list.querySelectorAll('.arrow').forEach(btn => {
+    btn.onclick = () => {
+      const idx = +btn.dataset.idx;
+      const dir = btn.dataset.act === 'up' ? -1 : 1;
+      moveStaff(idx, dir);
+    };
+  });
+}
+function moveStaff(idx, dir) {
+  const newIdx = idx + dir;
+  if (newIdx < 0 || newIdx >= state.staff.length) return;
+  [state.staff[idx], state.staff[newIdx]] = [state.staff[newIdx], state.staff[idx]];
+  renderOrderList();
+  render();
+  scheduleSave();
+}
 
 document.getElementById('editShifts').onclick = () => {
   document.getElementById('shiftList').innerHTML = '';
