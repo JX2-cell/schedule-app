@@ -1,0 +1,567 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="theme-color" content="#2563eb">
+<title>근무 스케쥴 관리</title>
+<script src="https://cdn.jsdelivr.net/npm/exceljs@4.4.0/dist/exceljs.min.js"></script>
+<style>
+  :root {
+    --primary: #2563eb; --primary-dark: #1d4ed8;
+    --red: #c00; --border: #888; --bg: #f5f5f5;
+    --ok: #16a34a; --warn: #d97706;
+  }
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; font-family: 'Malgun Gothic','맑은 고딕','Apple SD Gothic Neo',sans-serif; }
+  html, body { margin: 0; padding: 0; background: var(--bg); color: #222; overscroll-behavior: none; }
+  body { padding: 14px; padding-bottom: 80px; }
+  h1 { margin: 0 0 12px 0; font-size: 20px; display: flex; align-items: center; gap: 8px; flex-wrap: wrap;}
+  .sync-status { font-size: 12px; padding: 3px 9px; border-radius: 10px; background: #eef; color: #555; font-weight: normal; }
+  .sync-status.ok { background: #dcfce7; color: var(--ok); }
+  .sync-status.err { background: #fee; color: var(--red); }
+  .sync-status.saving { background: #fef3c7; color: var(--warn); }
+  .toolbar {
+    display: flex; gap: 8px; margin-bottom: 12px; align-items: center;
+    flex-wrap: wrap; background: white; padding: 10px 12px; border-radius: 10px;
+    box-shadow: 0 2px 6px rgba(0,0,0,0.06);
+  }
+  .toolbar select, .toolbar button, .toolbar input {
+    padding: 9px 12px; border: 1px solid #ccc; border-radius: 7px;
+    cursor: pointer; background: white; font-size: 14px; min-height: 40px;
+  }
+  .toolbar button:active { background: #e5edff; }
+  .toolbar .primary { background: var(--primary); color: white; border-color: var(--primary); }
+  .toolbar .primary:active { background: var(--primary-dark); }
+  .hint { color: #777; font-size: 12px; flex-basis: 100%; margin-top: 4px; }
+  .table-scroll {
+    overflow: auto; -webkit-overflow-scrolling: touch;
+    max-height: calc(100vh - 200px);
+    border-radius: 8px; background: white;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+  }
+  table { border-collapse: separate; border-spacing: 0; min-width: 100%; }
+  th, td {
+    border-right: 1px solid var(--border); border-bottom: 1px solid var(--border);
+    padding: 8px 10px; text-align: center;
+    min-width: 96px; font-size: 13px; background: white;
+  }
+  th { background: #f2f2f2; font-weight: bold; position: sticky; top: 0; z-index: 3; }
+  th.month-header { background: #e9e9e9; color: var(--red); }
+  th:nth-child(1), td:nth-child(1) {
+    position: sticky; left: 0; z-index: 2; min-width: 44px;
+    border-left: 1px solid var(--border); background: #fafafa;
+  }
+  th:nth-child(2), td:nth-child(2) {
+    position: sticky; left: 44px; z-index: 2; min-width: 44px; background: #fafafa;
+  }
+  th:nth-child(1), th:nth-child(2) { z-index: 4; background: #f0f0f0; }
+  td.weekend, th.weekend { color: var(--red); }
+  td.off { color: var(--red); font-weight: bold; }
+  td.cell { cursor: pointer; user-select: none; }
+  td.cell:active { background: #fff7c2 !important; }
+  td.cell:hover { background: #fffbe6; }
+  td.day-num { font-weight: bold; }
+  td.today { box-shadow: inset 0 0 0 2px var(--primary); }
+  .staff-header { position: relative; padding-right: 22px; }
+  .del-staff {
+    position: absolute; top: 4px; right: 6px; cursor: pointer;
+    color: var(--red); font-size: 14px; padding: 2px 6px;
+    background: rgba(255,255,255,0.7); border-radius: 4px;
+  }
+  .modal-bg { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.55); z-index: 100; align-items: center; justify-content: center; }
+  .modal-bg.show { display: flex; }
+  .modal { background: white; padding: 22px 24px; border-radius: 14px; width: min(440px, 100%); max-height: 92vh; overflow-y: auto; margin: 12px; }
+  .modal h3 { margin: 0 0 12px 0; font-size: 18px; }
+  .modal p { color: #555; font-size: 13px; margin: 6px 0; line-height: 1.5; }
+  .modal label { display:block; font-size: 13px; font-weight: 600; margin: 12px 0 4px; color: #333;}
+  .modal input[type=text], .modal input[type=password] {
+    width: 100%; padding: 10px 12px; border: 1px solid #ccc; border-radius: 7px;
+    font-size: 14px; min-height: 44px;
+  }
+  .preset-grid { display: flex; flex-wrap: wrap; gap: 8px; }
+  .preset-btn { padding: 11px 14px; border-radius: 8px; cursor: pointer; border: 1px solid #ddd; background: #f9f9f9; font-size: 14px; min-height: 44px; }
+  .preset-btn:active { background: #e5edff; border-color: #aac; }
+  .preset-btn.off { color: var(--red); font-weight: bold; }
+  .preset-btn.clear { color: #666; }
+  .shift-list { list-style: none; padding: 0; margin: 12px 0 8px; }
+  .shift-list li { display: flex; gap: 6px; align-items: center; padding: 4px 0; }
+  .shift-list input { flex: 1; padding: 9px 10px; border: 1px solid #ccc; border-radius: 6px; font-size: 14px; min-height: 40px; }
+  .shift-list button { padding: 8px 12px; border: 1px solid #ddd; background: #fafafa; border-radius: 6px; cursor: pointer; min-height: 40px; }
+  .modal-actions { display: flex; gap: 8px; justify-content: flex-end; margin-top: 18px; flex-wrap: wrap; }
+  .modal-actions button { padding: 10px 18px; border-radius: 7px; cursor: pointer; border: 1px solid #ccc; background: white; font-size: 14px; min-height: 44px; }
+  .modal-actions .primary { background: var(--primary); color: white; border-color: var(--primary); }
+  .modal-actions .danger { background: #fee2e2; border-color: #fca5a5; color: #991b1b; }
+  .input-row { margin-top: 14px; display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+  .input-row label { white-space: nowrap; margin: 0; }
+  .input-row input { padding: 9px 10px; border: 1px solid #ccc; border-radius: 6px; flex: 1; font-size: 14px; min-height: 40px; min-width: 140px; }
+  @media (max-width: 600px) {
+    body { padding: 10px; }
+    h1 { font-size: 18px; margin-bottom: 8px; }
+    .toolbar { gap: 6px; padding: 8px; }
+    .toolbar select, .toolbar button { padding: 8px 10px; font-size: 13px; }
+    .toolbar .hint { display: none; }
+    th, td { padding: 6px 8px; font-size: 12px; min-width: 80px; }
+    th:nth-child(1), td:nth-child(1) { min-width: 36px; }
+    th:nth-child(2), td:nth-child(2) { left: 36px; min-width: 36px; }
+    .modal { padding: 16px 16px 18px; border-radius: 12px; }
+    .preset-btn { padding: 12px 14px; flex: 1 1 calc(50% - 8px); text-align: center; }
+    .table-scroll { max-height: calc(100vh - 220px); }
+  }
+  @media (max-width: 380px) { th, td { font-size: 11px; min-width: 72px; padding: 5px 6px; } }
+  .compact td.cell { font-size: 12.5px; }
+  .lockscreen {
+    position: fixed; inset: 0; background: linear-gradient(135deg, #1e3a8a, #2563eb);
+    display: none; align-items: center; justify-content: center; z-index: 200; color: white;
+  }
+  .lockscreen.show { display: flex; }
+  .lockscreen .box {
+    background: white; color: #222; padding: 28px; border-radius: 14px;
+    width: min(380px, 92%); text-align: center; box-shadow: 0 10px 30px rgba(0,0,0,0.3);
+  }
+  .lockscreen h2 { margin: 0 0 4px; }
+  .lockscreen input { width: 100%; padding: 12px; font-size: 16px; border: 1px solid #ccc; border-radius: 8px; margin: 10px 0; }
+  .lockscreen button { width: 100%; padding: 12px; background: var(--primary); color: white; border: none; border-radius: 8px; font-size: 15px; cursor: pointer; }
+  .lockscreen .small { font-size: 12px; color: #888; margin-top: 12px; }
+</style>
+</head>
+<body>
+
+<!-- Lock screen (password gate) -->
+<div class="lockscreen show" id="lockscreen">
+  <div class="box">
+    <h2>🔒 스케쥴 잠금</h2>
+    <p style="color:#666; font-size:13px; margin:0 0 12px;">접속 비밀번호를 입력하세요</p>
+    <input type="password" id="lockInput" placeholder="비밀번호" autocomplete="current-password">
+    <button id="lockSubmit">잠금 해제</button>
+    <div class="small" id="lockMsg" style="color:#c00;"></div>
+    <div class="small" style="margin-top:14px; color:#888;">
+      처음 사용하시면 원하는 비밀번호를 입력하면 자동으로 새 방이 생깁니다.<br>
+      같은 비밀번호 = 같은 데이터 (모든 기기에서 공유).
+    </div>
+  </div>
+</div>
+
+<h1>📅 근무 스케쥴 관리 <span class="sync-status" id="syncStatus">대기 중</span></h1>
+<div class="toolbar">
+  <select id="year" aria-label="연도"></select>
+  <select id="month" aria-label="월"></select>
+  <button id="addStaff">＋직원</button>
+  <button id="editShifts">⚙시간대</button>
+  <button id="toggleCompact">🔁표시</button>
+  <button id="clearAll">🗑초기화</button>
+  <button id="exportBtn" class="primary">📥엑셀</button>
+  <button id="logoutBtn">🚪로그아웃</button>
+  <span class="hint">셀을 탭하면 근무를 지정할 수 있어요. 변경사항은 자동으로 클라우드에 저장됩니다.</span>
+</div>
+<div class="table-scroll" id="tableScroll">
+  <div id="tableWrap"></div>
+</div>
+
+<!-- Cell edit modal -->
+<div class="modal-bg" id="cellModal">
+  <div class="modal">
+    <h3 id="modalTitle">근무 선택</h3>
+    <div class="preset-grid" id="presets"></div>
+    <div class="input-row">
+      <label>직접 입력</label>
+      <input type="text" id="customInput" placeholder="예: 11:00~20:00" inputmode="text" autocomplete="off">
+      <button class="preset-btn" onclick="saveCustom()">저장</button>
+    </div>
+    <div class="modal-actions">
+      <button onclick="closeCellModal()">닫기</button>
+    </div>
+  </div>
+</div>
+
+<!-- Shifts setting modal -->
+<div class="modal-bg" id="shiftsModal">
+  <div class="modal">
+    <h3>근무시간대 설정</h3>
+    <p>자주 쓰는 근무시간을 등록하면 셀 클릭 시 빠르게 선택할 수 있어요. (휴무는 X로 입력)</p>
+    <ul class="shift-list" id="shiftList"></ul>
+    <button class="preset-btn" onclick="addShiftRow()">＋ 시간대 추가</button>
+    <div class="modal-actions">
+      <button onclick="closeShiftsModal()">취소</button>
+      <button class="primary" onclick="saveShifts()">저장</button>
+    </div>
+  </div>
+</div>
+
+<script>
+const DOW = ['일','월','화','수','목','금','토'];
+const SESSION_KEY = 'schedSessionV2';
+const API_URL = '/api/data';
+
+const defaultState = () => ({
+  staff: ['백현우','정정윤','전해연','이효정','최지혜','이예은'],
+  shifts: [
+    { label: '오픈',    time: '9:30~18:30' },
+    { label: '미들',    time: '12:30~21:30' },
+    { label: '미들2',   time: '12:00~21:00' },
+    { label: '미들3',   time: '10:30~19:30' },
+    { label: '나이트',  time: '16:00~21:00' },
+    { label: '나이트2', time: '16:30~21:30' },
+    { label: '단축',    time: '9:30~14:30' },
+    { label: '휴무',    time: 'X' }
+  ],
+  data: {}
+});
+
+let password = null;     // Room password (kept in sessionStorage only)
+let state = null;
+let viewYear, viewMonth;
+let compactMode = localStorage.getItem('scheduleCompact') === '1';
+let saveTimer = null;
+
+// === Session ===
+function saveSession(pw) { sessionStorage.setItem(SESSION_KEY, pw); }
+function loadSession() { return sessionStorage.getItem(SESSION_KEY); }
+function clearSession() { sessionStorage.removeItem(SESSION_KEY); }
+
+// === Sync status indicator ===
+function setStatus(text, cls='') {
+  const el = document.getElementById('syncStatus');
+  el.textContent = text;
+  el.className = 'sync-status ' + cls;
+}
+
+// === API helpers ===
+async function apiGet() {
+  const res = await fetch(API_URL, { headers: { 'X-Room-Password': password } });
+  if (!res.ok) throw new Error('HTTP ' + res.status);
+  return res.json();
+}
+async function apiPut(data) {
+  const res = await fetch(API_URL, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json', 'X-Room-Password': password },
+    body: JSON.stringify(data)
+  });
+  if (!res.ok) throw new Error('HTTP ' + res.status);
+  return res.json();
+}
+
+// === Boot ===
+async function boot() {
+  const saved = loadSession();
+  if (saved) {
+    password = saved;
+    document.getElementById('lockscreen').classList.remove('show');
+    await connectAndLoad();
+  }
+  // Otherwise lockscreen is shown by default
+}
+
+document.getElementById('lockSubmit').onclick = async () => {
+  const pw = document.getElementById('lockInput').value;
+  if (!pw) {
+    document.getElementById('lockMsg').textContent = '비밀번호를 입력해주세요';
+    return;
+  }
+  password = pw;
+  setStatus('연결 중…', 'saving');
+  try {
+    const result = await apiGet();
+    if (result.data) {
+      state = { ...defaultState(), ...result.data };
+    } else {
+      state = defaultState();
+      await apiPut(state);
+    }
+    saveSession(password);
+    document.getElementById('lockscreen').classList.remove('show');
+    initApp();
+  } catch (e) {
+    document.getElementById('lockMsg').textContent = '연결 실패: ' + e.message;
+    setStatus('오류', 'err');
+  }
+};
+document.getElementById('lockInput').addEventListener('keydown', e => {
+  if (e.key === 'Enter') document.getElementById('lockSubmit').click();
+});
+
+async function connectAndLoad() {
+  if (!password) return;
+  try {
+    setStatus('연결 중…', 'saving');
+    const result = await apiGet();
+    if (result.data) {
+      state = { ...defaultState(), ...result.data };
+    } else {
+      state = defaultState();
+      await apiPut(state);
+    }
+    initApp();
+  } catch (e) {
+    setStatus('오류', 'err');
+    alert('연결 실패: ' + e.message);
+    clearSession();
+    location.reload();
+  }
+}
+
+function initApp() {
+  const now = new Date();
+  viewYear = now.getFullYear();
+  viewMonth = now.getMonth() + 1;
+  initSelectors();
+  render();
+  setStatus('동기화됨', 'ok');
+  // Poll for updates every 15 seconds (simple sync between devices)
+  setInterval(pollUpdate, 15000);
+}
+
+async function pollUpdate() {
+  if (!password) return;
+  try {
+    const result = await apiGet();
+    if (result.data) {
+      const remote = JSON.stringify(result.data);
+      const local = JSON.stringify(state);
+      if (remote !== local) {
+        state = { ...defaultState(), ...result.data };
+        render();
+        setStatus('타기기 변경 반영', 'ok');
+        setTimeout(() => setStatus('동기화됨', 'ok'), 1500);
+      }
+    }
+  } catch (e) {
+    // silent fail on poll
+  }
+}
+
+function scheduleSave() {
+  setStatus('저장 중…', 'saving');
+  clearTimeout(saveTimer);
+  saveTimer = setTimeout(saveCloud, 500);
+}
+async function saveCloud() {
+  if (!password) return;
+  try {
+    await apiPut(state);
+    setStatus('동기화됨', 'ok');
+  } catch (e) {
+    setStatus('저장 실패', 'err');
+  }
+}
+
+// === Rendering ===
+function initSelectors() {
+  const yearSel = document.getElementById('year');
+  const monthSel = document.getElementById('month');
+  yearSel.innerHTML = ''; monthSel.innerHTML = '';
+  const cy = new Date().getFullYear();
+  for (let y = cy - 2; y <= cy + 3; y++) yearSel.add(new Option(y + '년', y, false, y === viewYear));
+  for (let m = 1; m <= 12; m++) monthSel.add(new Option(m + '월', m, false, m === viewMonth));
+  yearSel.onchange  = e => { viewYear  = +e.target.value; render(); };
+  monthSel.onchange = e => { viewMonth = +e.target.value; render(); };
+}
+
+function daysInMonth(y, m) { return new Date(y, m, 0).getDate(); }
+function dateKey(y, m, d, staff) {
+  return `${y}-${String(m).padStart(2,'0')}-${String(d).padStart(2,'0')}|${staff}`;
+}
+function escapeHtml(s) {
+  return String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+}
+function displayValue(v) {
+  if (!v) return '';
+  if (!compactMode) return v;
+  const sh = state.shifts.find(s => s.time === v);
+  return sh ? (sh.time === 'X' ? 'X' : sh.label) : v;
+}
+
+function render() {
+  if (!state) return;
+  const wrap = document.getElementById('tableWrap');
+  const y = viewYear, m = viewMonth;
+  const days = daysInMonth(y, m);
+  const today = new Date();
+  const isCurrentMonth = (today.getFullYear() === y && today.getMonth() + 1 === m);
+  const todayDate = today.getDate();
+
+  let html = '<table><thead><tr>';
+  html += `<th class="month-header">${m}월</th><th></th>`;
+  state.staff.forEach((s, i) => {
+    html += `<th class="staff-header">${escapeHtml(s)}<span class="del-staff" data-idx="${i}" title="직원 삭제">✕</span></th>`;
+  });
+  html += '</tr></thead><tbody>';
+  for (let d = 1; d <= days; d++) {
+    const dow = new Date(y, m - 1, d).getDay();
+    const isWeekend = (dow === 0 || dow === 6);
+    const todayCls = (isCurrentMonth && d === todayDate) ? ' today' : '';
+    html += '<tr>';
+    html += `<td class="day-num${isWeekend ? ' weekend' : ''}${todayCls}">${d}</td>`;
+    html += `<td class="${isWeekend ? 'weekend' : ''}${todayCls}">${DOW[dow]}</td>`;
+    state.staff.forEach(s => {
+      const k = dateKey(y, m, d, s);
+      const v = state.data[k] || '';
+      const cls = 'cell ' + (v === 'X' ? 'off' : 'shift');
+      html += `<td class="${cls}" data-day="${d}" data-staff="${escapeHtml(s)}">${escapeHtml(displayValue(v))}</td>`;
+    });
+    html += '</tr>';
+  }
+  html += '</tbody></table>';
+  wrap.innerHTML = html;
+  document.body.classList.toggle('compact', compactMode);
+  document.querySelectorAll('td.cell').forEach(td => {
+    td.onclick = () => openCellModal(+td.dataset.day, td.dataset.staff);
+  });
+  document.querySelectorAll('.del-staff').forEach(el => {
+    el.onclick = e => { e.stopPropagation(); removeStaff(+el.dataset.idx); };
+  });
+}
+
+let currentCell = null;
+function openCellModal(day, staff) {
+  currentCell = { day, staff };
+  document.getElementById('modalTitle').textContent = `${viewMonth}월 ${day}일 · ${staff}`;
+  const presets = document.getElementById('presets');
+  presets.innerHTML = '';
+  state.shifts.forEach(sh => {
+    const b = document.createElement('span');
+    b.className = 'preset-btn' + (sh.time === 'X' ? ' off' : '');
+    b.textContent = sh.time === 'X' ? `${sh.label} (X)` : `${sh.label} ${sh.time}`;
+    b.onclick = () => setCellValue(sh.time);
+    presets.appendChild(b);
+  });
+  const clearBtn = document.createElement('span');
+  clearBtn.className = 'preset-btn clear';
+  clearBtn.textContent = '✕ 비우기';
+  clearBtn.onclick = () => setCellValue('');
+  presets.appendChild(clearBtn);
+  document.getElementById('customInput').value =
+    state.data[dateKey(viewYear, viewMonth, day, staff)] || '';
+  document.getElementById('cellModal').classList.add('show');
+}
+function closeCellModal() { document.getElementById('cellModal').classList.remove('show'); }
+function setCellValue(v) {
+  if (!currentCell) return;
+  const k = dateKey(viewYear, viewMonth, currentCell.day, currentCell.staff);
+  if (v === '') delete state.data[k]; else state.data[k] = v;
+  render(); closeCellModal(); scheduleSave();
+}
+function saveCustom() { setCellValue(document.getElementById('customInput').value.trim()); }
+
+document.getElementById('addStaff').onclick = () => {
+  const name = prompt('직원 이름을 입력하세요:');
+  if (!name || !name.trim()) return;
+  const t = name.trim();
+  if (state.staff.includes(t)) { alert('이미 같은 이름의 직원이 있어요.'); return; }
+  state.staff.push(t);
+  render(); scheduleSave();
+};
+function removeStaff(idx) {
+  const name = state.staff[idx];
+  if (!confirm(`'${name}' 직원을 삭제하시겠어요?\n(이 직원의 모든 근무 기록이 함께 삭제됩니다)`)) return;
+  state.staff.splice(idx, 1);
+  Object.keys(state.data).forEach(k => { if (k.endsWith('|' + name)) delete state.data[k]; });
+  render(); scheduleSave();
+}
+
+document.getElementById('clearAll').onclick = () => {
+  if (!confirm(`${viewYear}년 ${viewMonth}월의 모든 근무 기록을 지우시겠어요?`)) return;
+  const prefix = `${viewYear}-${String(viewMonth).padStart(2,'0')}-`;
+  Object.keys(state.data).forEach(k => { if (k.startsWith(prefix)) delete state.data[k]; });
+  render(); scheduleSave();
+};
+document.getElementById('toggleCompact').onclick = () => {
+  compactMode = !compactMode;
+  localStorage.setItem('scheduleCompact', compactMode ? '1' : '0');
+  render();
+};
+document.getElementById('logoutBtn').onclick = () => {
+  if (!confirm('로그아웃 하시겠어요? (다음에 비밀번호를 다시 입력해야 함)')) return;
+  clearSession();
+  location.reload();
+};
+
+document.getElementById('editShifts').onclick = () => {
+  document.getElementById('shiftList').innerHTML = '';
+  state.shifts.forEach(sh => addShiftRow(sh.label, sh.time));
+  document.getElementById('shiftsModal').classList.add('show');
+};
+function addShiftRow(label='', time='') {
+  const li = document.createElement('li');
+  const l = document.createElement('input'); l.type='text'; l.placeholder='이름'; l.value=label;
+  const t = document.createElement('input'); t.type='text'; t.placeholder='시간 또는 X'; t.value=time;
+  const del = document.createElement('button'); del.textContent='삭제';
+  del.onclick = () => li.remove();
+  li.append(l, t, del);
+  document.getElementById('shiftList').appendChild(li);
+}
+function closeShiftsModal() { document.getElementById('shiftsModal').classList.remove('show'); }
+function saveShifts() {
+  const newShifts = [];
+  document.querySelectorAll('#shiftList li').forEach(li => {
+    const ins = li.querySelectorAll('input');
+    const label = ins[0].value.trim(), time = ins[1].value.trim();
+    if (label && time) newShifts.push({ label, time });
+  });
+  if (newShifts.length === 0) { alert('최소 1개 이상의 시간대가 필요해요.'); return; }
+  state.shifts = newShifts;
+  render(); closeShiftsModal(); scheduleSave();
+}
+
+// === Excel export ===
+document.getElementById('exportBtn').onclick = async () => {
+  const wb = new ExcelJS.Workbook();
+  const y = viewYear, m = viewMonth;
+  const ws = wb.addWorksheet(`${y}년${m}월`);
+  const days = daysInMonth(y, m);
+  const thin = { style: 'thin', color: { argb: 'FF888888' } };
+  const border = { top: thin, left: thin, bottom: thin, right: thin };
+  const center = { horizontal: 'center', vertical: 'middle' };
+  const redFont = { bold: true, color: { argb: 'FFCC0000' } };
+
+  ws.addRow([`${m}월`, '', ...state.staff]);
+  const headerRow = ws.getRow(1);
+  headerRow.height = 22;
+  headerRow.eachCell(cell => {
+    cell.font = { bold: true };
+    cell.alignment = center; cell.border = border;
+    cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFF0F0F0' } };
+  });
+  headerRow.getCell(1).font = { bold: true, color: { argb: 'FFCC0000' } };
+
+  for (let d = 1; d <= days; d++) {
+    const dow = new Date(y, m - 1, d).getDay();
+    const isWeekend = (dow === 0 || dow === 6);
+    const values = [d, DOW[dow], ...state.staff.map(s => state.data[dateKey(y, m, d, s)] || '')];
+    const row = ws.addRow(values);
+    row.height = 19;
+    row.eachCell({ includeEmpty: true }, (cell, colNumber) => {
+      cell.alignment = center; cell.border = border;
+      if (colNumber === 1) cell.font = isWeekend ? redFont : { bold: true };
+      else if (colNumber === 2) { if (isWeekend) cell.font = redFont; }
+      else { if (cell.value === 'X') cell.font = redFont; }
+    });
+  }
+  ws.columns.forEach((col, i) => { col.width = (i < 2) ? 6 : 14; });
+
+  const buffer = await wb.xlsx.writeBuffer();
+  const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url; a.download = `스케쥴_${y}년_${m}월.xlsx`;
+  document.body.appendChild(a); a.click(); document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+};
+
+// Modal close behavior
+document.querySelectorAll('.modal-bg').forEach(bg => {
+  bg.onclick = e => { if (e.target === bg) bg.classList.remove('show'); };
+});
+document.addEventListener('keydown', e => {
+  if (e.key === 'Escape') document.querySelectorAll('.modal-bg').forEach(bg => bg.classList.remove('show'));
+});
+document.addEventListener('dblclick', e => {
+  if (e.target.closest('.preset-btn, .toolbar button, td.cell')) e.preventDefault();
+}, { passive: false });
+
+boot();
+</script>
+</body>
+</html>

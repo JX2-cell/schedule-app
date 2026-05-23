@@ -1,0 +1,9 @@
+{
+  "name": "schedule-app",
+  "version": "1.0.0",
+  "private": true,
+  "description": "근무 스케쥴 관리 앱 (Vercel KV 기반)",
+  "dependencies": {
+    "@vercel/kv": "^3.0.0"
+  }
+}
