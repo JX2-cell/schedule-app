@@ -65,6 +65,8 @@
   td.day-num { font-weight: bold; }
   td.today { box-shadow: inset 0 0 0 2px var(--primary); }
   .staff-header { position: relative; padding-right: 22px; }
+  .staff-name { cursor: pointer; }
+  .staff-name:hover { color: var(--primary); text-decoration: underline dotted; }
   .del-staff {
     position: absolute; top: 4px; right: 6px; cursor: pointer;
     color: var(--red); font-size: 14px; padding: 2px 6px;
@@ -385,7 +387,7 @@ function render() {
   let html = '<table><thead><tr>';
   html += `<th class="month-header">${m}월</th><th></th>`;
   state.staff.forEach((s, i) => {
-    html += `<th class="staff-header">${escapeHtml(s)}<span class="del-staff" data-idx="${i}" title="직원 삭제">✕</span></th>`;
+    html += `<th class="staff-header"><span class="staff-name" data-idx="${i}" title="클릭하여 이름 변경">${escapeHtml(s)}</span><span class="del-staff" data-idx="${i}" title="직원 삭제">✕</span></th>`;
   });
   html += '</tr></thead><tbody>';
   for (let d = 1; d <= days; d++) {
@@ -411,6 +413,9 @@ function render() {
   });
   document.querySelectorAll('.del-staff').forEach(el => {
     el.onclick = e => { e.stopPropagation(); removeStaff(+el.dataset.idx); };
+  });
+  document.querySelectorAll('.staff-name').forEach(el => {
+    el.onclick = e => { e.stopPropagation(); renameStaff(+el.dataset.idx); };
   });
 }
 
@@ -458,6 +463,29 @@ function removeStaff(idx) {
   if (!confirm(`'${name}' 직원을 삭제하시겠어요?\n(이 직원의 모든 근무 기록이 함께 삭제됩니다)`)) return;
   state.staff.splice(idx, 1);
   Object.keys(state.data).forEach(k => { if (k.endsWith('|' + name)) delete state.data[k]; });
+  render(); scheduleSave();
+}
+
+function renameStaff(idx) {
+  const oldName = state.staff[idx];
+  const newName = prompt(`'${oldName}' 의 새 이름을 입력하세요:`, oldName);
+  if (newName === null) return; // cancelled
+  const trimmed = newName.trim();
+  if (!trimmed) { alert('빈 이름은 사용할 수 없어요.'); return; }
+  if (trimmed === oldName) return; // unchanged
+  if (state.staff.includes(trimmed)) { alert(`'${trimmed}' 은(는) 이미 있는 직원 이름이에요.`); return; }
+  // Update staff array
+  state.staff[idx] = trimmed;
+  // Migrate all data keys: "YYYY-MM-DD|oldName" -> "YYYY-MM-DD|newName"
+  const suffix = '|' + oldName;
+  const newSuffix = '|' + trimmed;
+  Object.keys(state.data).forEach(k => {
+    if (k.endsWith(suffix)) {
+      const newKey = k.slice(0, k.length - suffix.length) + newSuffix;
+      state.data[newKey] = state.data[k];
+      delete state.data[k];
+    }
+  });
   render(); scheduleSave();
 }
 
